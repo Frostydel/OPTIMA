@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>E.D.I.T.H. Assist</title>
+<style>
+  :root {
+    --bg:#10131a; --panel:#1a1f2b; --text:#f2f5fa; --muted:#aab4c5;
+    --accent:#4da3ff; --ok:#3ecf8e; --warn:#ffb020; --err:#ff6b6b; --border:#33405a;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:17px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--text); }
+  main { max-width: 920px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  h2 { font-size: 1.1rem; margin: 0 0 10px; }
+  section { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:14px; }
+  .notice { border-color: var(--warn); color: #ffe2a8; }
+  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:end; }
+  .field { display:flex; flex-direction:column; gap:4px; min-width: 150px; }
+  .field.grow { flex:1 1 260px; }
+  label { color: var(--muted); font-size: .9rem; }
+  select, input[type=text] { font:inherit; padding:10px; border-radius:8px; border:1px solid var(--border); background:#0e121a; color:var(--text); }
+  button { font:inherit; font-weight:600; padding:12px 16px; border-radius:10px; border:2px solid var(--accent); background:var(--accent); color:#04121f; cursor:pointer; min-height:46px; }
+  button.secondary { background:transparent; color:var(--text); border-color:var(--border); }
+  button.danger { background:var(--err); border-color:var(--err); color:#2a0505; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  :focus-visible { outline:3px solid #fff; outline-offset:2px; }
+  .stage { position:relative; background:#000; border-radius:10px; overflow:hidden; aspect-ratio:16/9; display:grid; place-items:center; margin-bottom:10px; }
+  .stage video { width:100%; height:100%; object-fit:contain; display:none; }
+  .stage.on video { display:block; }
+  .stage .placeholder { color:var(--muted); padding:20px; text-align:center; }
+  .stage.on .placeholder { display:none; }
+  .badge { position:absolute; top:8px; left:8px; background:rgba(0,0,0,.7); padding:4px 10px; border-radius:20px; font-size:.85rem; display:none; }
+  .stage.live .badge { display:block; }
+  .loading { display:flex; gap:10px; align-items:center; color:var(--accent); margin:8px 0; }
+  .loading[hidden] { display:none; }
+  .spinner { width:20px; height:20px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+  #status { color:var(--muted); min-height:1.5em; }
+  #error { color:var(--err); font-weight:600; }
+  #error:empty { display:none; }
+  #results { list-style:none; margin:0; padding:0; display:grid; gap:10px; }
+  #results li { border-left:4px solid var(--accent); padding:8px 12px; background:#131824; border-radius:6px; }
+  #results .meta { color:var(--muted); font-size:.82rem; }
+  #results p { margin:4px 0 0; font-size:1.1rem; white-space:pre-wrap; }
+  #preview { max-width:100%; max-height:240px; border-radius:8px; margin-top:10px; display:none; }
+  .check { display:flex; gap:8px; align-items:center; min-height:46px; }
+  .check input { width:22px; height:22px; }
+  .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>E.D.I.T.H. Assist</h1>
+    <p id="tagline" style="margin:0 0 12px;color:var(--muted)">Point your camera at your surroundings and hear a short description.</p>
+  </header>
+
+  <section class="notice" aria-label="Safety notice">
+    <strong>Safety:</strong> descriptions come from an AI and can be wrong or incomplete.
+    They never confirm that a path, obstacle or environment is safe. Do not rely on this
+    tool for navigation or safety decisions.
+  </section>
+
+  <section aria-labelledby="h-settings">
+    <h2 id="h-settings">Settings</h2>
+    <div class="row">
+      <div class="field">
+        <label for="action">Action</label>
+        <select id="action">
+          <option value="describe">Describe</option>
+          <option value="read">Read text</option>
+          <option value="translate">Translate text</option>
+          <option value="explain">Explain</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="language">Response language</label>
+        <select id="language">
+          <option value="English">English</option>
+          <option value="French">Français</option>
+          <option value="Arabic">العربية</option>
+        </select>
+      </div>
+      <div class="field grow">
+        <label for="question">Optional question about the image</label>
+        <input id="question" type="text" maxlength="500" placeholder="e.g. What colour is the door?">
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div class="field">
+        <label for="interval">Live Assist interval</label>
+        <select id="interval">
+          <option value="3">Every 3 seconds</option>
+          <option value="4" selected>Every 4 seconds</option>
+          <option value="5">Every 5 seconds</option>
+          <option value="8">Every 8 seconds</option>
+          <option value="15">Every 15 seconds</option>
+        </select>
+      </div>
+      <label class="check" style="color:var(--text)"><input id="speakToggle" type="checkbox" checked> Speak responses aloud</label>
+      <button id="stopSpeaking" class="secondary" type="button" aria-label="Stop speaking">Stop speaking</button>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-camera">
+    <h2 id="h-camera">Camera</h2>
+    <div id="stage" class="stage">
+      <video id="video" autoplay playsinline muted aria-label="Live camera preview"></video>
+      <div class="placeholder">Camera is off. Choose “Start camera”.</div>
+      <div class="badge" id="liveBadge">Live Assist</div>
+    </div>
+    <div class="row">
+      <button id="startCam" type="button" aria-label="Start camera">Start camera</button>
+      <button id="stopCam" class="secondary" type="button" aria-label="Stop camera" disabled>Stop camera</button>
+      <button id="analyzeNow" type="button" aria-label="Capture and analyze one frame" disabled>Analyze now</button>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-live">
+    <h2 id="h-live">Live Assist</h2>
+    <p style="margin:0 0 10px;color:var(--muted)">Automatically analyzes a new frame every few seconds, one request at a time.</p>
+    <label class="check" style="color:var(--text)"><input id="skipUnchanged" type="checkbox" checked> Skip unchanged scenes (saves requests)</label>
+    <div class="row">
+      <button id="liveStart" type="button" aria-label="Start Live Assist" disabled>Start Live Assist</button>
+      <button id="livePause" class="secondary" type="button" aria-label="Pause Live Assist" disabled>Pause</button>
+      <button id="liveStop" class="danger" type="button" aria-label="Stop Live Assist" disabled>Stop</button>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-upload">
+    <h2 id="h-upload">Or analyze a photo</h2>
+    <div class="row">
+      <div class="field grow">
+        <label for="file">Image file (JPEG, PNG or WEBP, up to 8 MiB)</label>
+        <input id="file" type="file" accept="image/jpeg,image/png,image/webp">
+      </div>
+      <button id="uploadAnalyze" type="button" aria-label="Analyze selected photo" disabled>Analyze photo</button>
+    </div>
+    <img id="preview" alt="Preview of the selected photo">
+  </section>
+
+  <section aria-labelledby="h-results">
+    <h2 id="h-results">Responses</h2>
+    <div id="loading" class="loading" hidden><span class="spinner" aria-hidden="true"></span><span>Analyzing…</span></div>
+    <div id="status" role="status" aria-live="polite"></div>
+    <div id="error" role="alert"></div>
+    <ol id="results" aria-live="off" aria-label="AI responses, newest first" aria-busy="false"></ol>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const el = {
+  action: $("action"), language: $("language"), question: $("question"),
+  interval: $("interval"), skipUnchanged: $("skipUnchanged"), speakToggle: $("speakToggle"), stopSpeaking: $("stopSpeaking"),
+  stage: $("stage"), video: $("video"),
+  startCam: $("startCam"), stopCam: $("stopCam"), analyzeNow: $("analyzeNow"),
+  liveStart: $("liveStart"), livePause: $("livePause"), liveStop: $("liveStop"),
+  file: $("file"), uploadAnalyze: $("uploadAnalyze"), preview: $("preview"),
+  loading: $("loading"), status: $("status"), error: $("error"), results: $("results"),
+};
+
+// ---------- configuration ----------
+const MAX_FRAME_SIDE = 1280;        // resize captured frames before upload
+const JPEG_QUALITY = 0.8;
+const REQUEST_TIMEOUT_MS = 45000;   // backend/Gemini timeout is 30 s
+const SCENE_CHANGE_THRESHOLD = 0.04; // mean grey-level difference (0..1) to count as "changed"
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+const MAX_CONSECUTIVE_ERRORS = 5;
+const MAX_LOG_ENTRIES = 20;
+const LIVE_HINT = "Answer in at most two short sentences.";
+const TTS_LANG = { English: "en-US", French: "fr-FR", Arabic: "ar-SA" };
+
+// ---------- state ----------
+let stream = null;
+let busy = false;                   // true while a request is in flight (guarantees no overlap)
+let inflight = null;                // AbortController of the current request
+const live = { state: "off", timer: null, lastSig: null, errors: 0 }; // off | running | paused
+let lastAnswerKey = "";
+let lastSpokenKey = "";
+let uploadDataUrl = null;
+
+// ---------- status helpers ----------
+function setStatus(msg) { el.status.textContent = msg; }
+function setError(msg) { el.error.textContent = msg || ""; }
+function setBusy(b) {
+  busy = b;
+  el.loading.hidden = !b;
+  el.results.setAttribute("aria-busy", String(b));
+  updateUI();
+}
+
+function updateUI() {
+  const camOn = !!stream;
+  el.startCam.disabled = camOn;
+  el.stopCam.disabled = !camOn;
+  el.analyzeNow.disabled = !camOn || busy;
+  el.liveStart.disabled = !camOn || live.state !== "off";
+  el.livePause.disabled = live.state === "off";
+  el.livePause.textContent = live.state === "paused" ? "Resume" : "Pause";
+  el.livePause.setAttribute("aria-label", live.state === "paused" ? "Resume Live Assist" : "Pause Live Assist");
+  el.liveStop.disabled = live.state === "off";
+  el.uploadAnalyze.disabled = !uploadDataUrl || busy;
+  el.stage.classList.toggle("on", camOn);
+  el.stage.classList.toggle("live", live.state === "running");
+}
+
+// ---------- camera ----------
+function cameraErrorMessage(err) {
+  switch (err && err.name) {
+    case "NotAllowedError":
+    case "SecurityError":
+      return "Camera permission was denied. Allow camera access in your browser settings, then choose Start camera again.";
+    case "NotFoundError":
+    case "DevicesNotFoundError":
+    case "OverconstrainedError":
+      return "No camera was found. Connect a camera and try again.";
+    case "NotReadableError":
+    case "TrackStartError":
+    case "AbortError":
+      return "The camera is busy or unavailable. Close other apps that use the camera and try again.";
+    default:
+      return "The camera could not be started" + (err && err.message ? " (" + err.message + ")" : "") + ".";
+  }
+}
+
+async function startCamera() {
+  setError("");
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setError("This browser cannot access the camera here. Use a modern browser on https:// or http://localhost.");
+    return;
+  }
+  el.startCam.disabled = true;
+  setStatus("Requesting camera access…");
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false,
+    });
+  } catch (err) {
+    stream = null;
+    setError(cameraErrorMessage(err));
+    setStatus("Camera is off.");
+    updateUI();
+    return;
+  }
+  stream.getVideoTracks().forEach((t) => t.addEventListener("ended", onCameraLost));
+  el.video.srcObject = stream;
+  try { await el.video.play(); } catch (_) { /* autoplay is already requested via attribute */ }
+  setStatus("Camera is on.");
+  updateUI();
+}
+
+function releaseCamera() {
+  if (stream) {
+    stream.getTracks().forEach((t) => { t.onended = null; t.stop(); });
+    stream = null;
+  }
+  el.video.srcObject = null;
+}
+
+function stopCamera(message) {
+  stopLive(true);
+  abortInflight();
+  releaseCamera();
+  setStatus(message || "Camera stopped.");
+  updateUI();
+}
+
+function onCameraLost() {
+  if (!stream) return;
+  stopCamera("Camera disconnected.");
+  setError("The camera was disconnected or stopped unexpectedly. Reconnect it and choose Start camera.");
+}
+
+// ---------- frame capture ----------
+const frameCanvas = document.createElement("canvas");
+const sigCanvas = document.createElement("canvas");
+sigCanvas.width = 16; sigCanvas.height = 12;
+
+function videoReady() { return stream && el.video.videoWidth > 0 && el.video.readyState >= 2; }
+
+function captureFrame() {
+  const v = el.video;
+  const scale = Math.min(1, MAX_FRAME_SIDE / Math.max(v.videoWidth, v.videoHeight));
+  frameCanvas.width = Math.round(v.videoWidth * scale);
+  frameCanvas.height = Math.round(v.videoHeight * scale);
+  frameCanvas.getContext("2d").drawImage(v, 0, 0, frameCanvas.width, frameCanvas.height);
+  return frameCanvas.toDataURL("image/jpeg", JPEG_QUALITY);
+}
+
+function sceneSignature() {
+  const ctx = sigCanvas.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(el.video, 0, 0, sigCanvas.width, sigCanvas.height);
+  const d = ctx.getImageData(0, 0, sigCanvas.width, sigCanvas.height).data;
+  const out = new Float32Array(d.length / 4);
+  for (let i = 0; i < out.length; i++) out[i] = (0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2]) / 255;
+  return out;
+}
+
+function sceneDifference(a, b) {
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
+  return sum / a.length;
+}
+
+// ---------- API ----------
+function abortInflight() { if (inflight) inflight.abort(); }
+
+function httpErrorMessage(status, detail) {
+  if (typeof detail === "string" && detail) return detail;
+  if (status === 422) return "The request was rejected. Try a smaller or different image.";
+  if (status === 429) return "Too many requests. Please wait a moment and try again.";
+  if (status >= 500) return "The server had a problem. Please try again.";
+  return "The request failed (HTTP " + status + ").";
+}
+
+/** Calls the existing /analyze contract. Returns {answer} | {aborted:true} | {error}. */
+async function requestAnalysis(imageDataUrl, { live: isLive = false } = {}) {
+  const action = el.action.value;
+  let question = el.question.value.trim();
+  if (isLive && (action === "describe" || action === "explain")) {
+    question = (question + " " + LIVE_HINT).trim();
+  }
+  const ctrl = new AbortController();
+  inflight = ctrl;
+  let timedOut = false;
+  const timer = setTimeout(() => { timedOut = true; ctrl.abort(); }, REQUEST_TIMEOUT_MS);
+  try {
+    const res = await fetch("/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: ctrl.signal,
+      body: JSON.stringify({
+        image_base64: imageDataUrl,
+        action,
+        question,
+        language: el.language.value,
+      }),
+    });
+    let body = null;
+    try { body = await res.json(); } catch (_) { /* non-JSON error page */ }
+    if (!res.ok) return { error: httpErrorMessage(res.status, body && body.detail) };
+    if (!body || typeof body.answer !== "string" || !body.answer.trim()) {
+      return { error: "The server returned an empty answer. Try again with a clearer image." };
+    }
+    return { answer: body.answer.trim() };
+  } catch (err) {
+    if (timedOut) return { error: "The request timed out. Check your connection and try again." };
+    if (err && err.name === "AbortError") return { aborted: true };
+    return { error: "Cannot reach the EDITH Assist server. Check that it is running and that you are online." };
+  } finally {
+    clearTimeout(timer);
+    if (inflight === ctrl) inflight = null;
+  }
+}
+
+// ---------- results + speech ----------
+function normalize(s) { return s.toLowerCase().replace(/\s+/g, " ").trim(); }
+
+function showAnswer(answer, labelAction, labelLang) {
+  const key = normalize(answer) + "|" + labelLang;
+  const time = new Date().toLocaleTimeString();
+  const duplicate = key === lastAnswerKey;
+  lastAnswerKey = key;
+
+  if (duplicate && el.results.firstElementChild) {
+    el.results.firstElementChild.querySelector(".meta").textContent = labelAction + " · " + labelLang + " · " + time + " (unchanged)";
+    return false;
+  }
+  const li = document.createElement("li");
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  meta.textContent = labelAction + " · " + labelLang + " · " + time;
+  const p = document.createElement("p");
+  p.dir = "auto";
+  p.textContent = answer;
+  li.append(meta, p);
+  el.results.prepend(li);
+  while (el.results.children.length > MAX_LOG_ENTRIES) el.results.lastElementChild.remove();
+  return true;
+}
+
+function pickVoice(langTag) {
+  const voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
+  const base = langTag.split("-")[0].toLowerCase();
+  return {
+    voice: voices.find((v) => v.lang.toLowerCase() === langTag.toLowerCase())
+        || voices.find((v) => v.lang.toLowerCase().startsWith(base)) || null,
+    haveVoices: voices.length > 0,
+  };
+}
+
+function stopSpeech() { if ("speechSynthesis" in window) speechSynthesis.cancel(); }
+
+function speak(text, languageName) {
+  if (!("speechSynthesis" in window)) {
+    setStatus("Spoken responses are not supported in this browser. The text is shown on screen.");
+    return;
+  }
+  const tag = TTS_LANG[languageName] || "en-US";
+  const key = normalize(text) + "|" + tag;
+  if (key === lastSpokenKey) return;  // never repeat the same description
+  lastSpokenKey = key;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = tag;
+  const { voice, haveVoices } = pickVoice(tag);
+  if (voice) u.voice = voice;
+  else if (haveVoices) setStatus("No " + languageName + " voice is installed in this browser; the response is shown on screen and may be read with a default voice.");
+  speechSynthesis.speak(u);
+}
+
+if ("speechSynthesis" in window) speechSynthesis.addEventListener("voiceschanged", () => {});
+
+el.speakToggle.addEventListener("change", () => {
+  // If the user turns speech off, let their screen reader announce new answers instead.
+  el.results.setAttribute("aria-live", el.speakToggle.checked ? "off" : "polite");
+  if (!el.speakToggle.checked) stopSpeech();
+});
+el.stopSpeaking.addEventListener("click", () => { stopSpeech(); setStatus("Speech stopped."); });
+
+// ---------- one analysis (shared by Analyze now, Live Assist and upload) ----------
+/** Returns "ok" | "error" | "aborted" | "busy". */
+async function runAnalysis(imageDataUrl, { live: isLive = false } = {}) {
+  if (busy) return "busy";
+  setError("");
+  setBusy(true);
+  setStatus("Analyzing…");
+  const action = el.action.options[el.action.selectedIndex].text;
+  const language = el.language.value;
+  let result;
+  try {
+    result = await requestAnalysis(imageDataUrl, { live: isLive });
+  } finally {
+    setBusy(false);
+  }
+  if (result.aborted) return "aborted";
+  if (result.error) {
+    setError(result.error);
+    setStatus("Analysis failed.");
+    return "error";
+  }
+  const isNew = showAnswer(result.answer, action, language);
+  setStatus(isNew ? "New response ready." : "Scene unchanged.");
+  if (isNew && el.speakToggle.checked) speak(result.answer, language);
+  return "ok";
+}
+
+// ---------- manual camera analysis + upload ----------
+el.analyzeNow.addEventListener("click", async () => {
+  if (!videoReady()) { setError("The camera is not ready yet. Wait a moment and try again."); return; }
+  await runAnalysis(captureFrame());
+});
+
+el.file.addEventListener("change", () => {
+  setError("");
+  uploadDataUrl = null;
+  el.preview.style.display = "none";
+  const f = el.file.files[0];
+  if (!f) { updateUI(); return; }
+  if (!/^image\/(jpeg|png|webp)$/.test(f.type)) {
+    setError("Unsupported file. Choose a JPEG, PNG or WEBP image.");
+    updateUI(); return;
+  }
+  if (f.size > MAX_UPLOAD_BYTES) {
+    setError("That image is larger than 8 MiB. Compress or resize it and try again.");
+    updateUI(); return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    uploadDataUrl = reader.result;
+    el.preview.src = uploadDataUrl;
+    el.preview.style.display = "block";
+    setStatus("Photo loaded. Choose Analyze photo.");
+    updateUI();
+  };
+  reader.onerror = () => { setError("The file could not be read. Try another image."); updateUI(); };
+  reader.readAsDataURL(f);
+});
+
+el.uploadAnalyze.addEventListener("click", async () => {
+  if (uploadDataUrl) await runAnalysis(uploadDataUrl);
+});
+
+// ---------- Live Assist ----------
+function scheduleNext() {
+  clearTimeout(live.timer);
+  if (live.state !== "running") return;
+  const base = Number(el.interval.value) * 1000;
+  const delay = Math.min(30000, base * Math.pow(2, Math.min(live.errors, 3))); // back off after errors
+  live.timer = setTimeout(liveTick, delay);
+}
+
+async function liveTick() {
+  live.timer = null;
+  if (live.state !== "running") return;
+  if (!videoReady()) { scheduleNext(); return; }
+  if (busy) { scheduleNext(); return; }
+
+  const sig = sceneSignature();
+  if (el.skipUnchanged.checked && live.lastSig && sceneDifference(sig, live.lastSig) < SCENE_CHANGE_THRESHOLD) {
+    setStatus("Scene unchanged. Waiting…");
+    scheduleNext();
+    return;
+  }
+  const outcome = await runAnalysis(captureFrame(), { live: true });
+  if (live.state !== "running") return;          // paused or stopped while waiting
+  if (outcome === "ok") { live.lastSig = sig; live.errors = 0; }
+  else if (outcome === "error") {
+    live.errors++;
+    if (live.errors >= MAX_CONSECUTIVE_ERRORS) {
+      pauseLive();
+      setError("Live Assist paused after repeated errors. Check the connection, then choose Resume.");
+      return;
+    }
+  }
+  scheduleNext();
+}
+
+function startLive() {
+  if (!stream || live.state !== "off") return;
+  live.state = "running"; live.lastSig = null; live.errors = 0;
+  setError("");
+  setStatus("Live Assist started.");
+  updateUI();
+  liveTick();
+}
+
+function pauseLive() {
+  if (live.state !== "running") return;
+  live.state = "paused";
+  clearTimeout(live.timer); live.timer = null;
+  abortInflight();
+  stopSpeech();
+  setStatus("Live Assist paused.");
+  updateUI();
+}
+
+function resumeLive() {
+  if (live.state !== "paused" || !stream) return;
+  live.state = "running"; live.errors = 0;
+  setStatus("Live Assist resumed.");
+  updateUI();
+  liveTick();
+}
+
+function stopLive(silent) {
+  if (live.state === "off") return;
+  live.state = "off";
+  clearTimeout(live.timer); live.timer = null;
+  live.lastSig = null; live.errors = 0;
+  abortInflight();
+  stopSpeech();
+  if (!silent) setStatus("Live Assist stopped.");
+  updateUI();
+}
+
+el.liveStart.addEventListener("click", startLive);
+el.livePause.addEventListener("click", () => (live.state === "paused" ? resumeLive() : pauseLive()));
+el.liveStop.addEventListener("click", () => stopLive(false));
+el.startCam.addEventListener("click", startCamera);
+el.stopCam.addEventListener("click", () => stopCamera("Camera stopped."));
+
+// A changed action, language or question should be analyzed on the next live tick.
+["change", "input"].forEach((evt) => {
+  el.action.addEventListener(evt, () => { live.lastSig = null; });
+  el.language.addEventListener(evt, () => { live.lastSig = null; });
+  el.question.addEventListener(evt, () => { live.lastSig = null; });
+});
+el.interval.addEventListener("change", () => { if (live.state === "running" && !busy) scheduleNext(); });
+
+window.addEventListener("pagehide", () => { stopLive(true); releaseCamera(); stopSpeech(); });
+updateUI();
+setStatus("Ready. Start the camera or choose a photo.");
+</script>
+</body>
+</html>

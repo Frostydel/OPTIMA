@@ -1,0 +1,6 @@
+google-genai
+httpx
+Pillow
+python-dotenv
+fastapi
+uvicorn
