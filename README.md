@@ -3,6 +3,7 @@
 **Optical Perception, Translation & Intelligent Multimodal Assistance**
 
 *See beyond limits.*
+TEAM MEMBERS: Walid RADI ,MALAK ELAIDI, WALID BOULAZZAFIR,ZAKARIA HARIRA
 
 OPTIMA is an AI-assisted glasses project that turns a deliberately captured image into useful text and spoken feedback. A camera mounted on the glasses captures the scene, a backend sends the image to a hosted Gemma vision-language model, and a compatible web app will present the result on a phone or laptop.
 
